@@ -42,6 +42,16 @@ class ClassificationResult:
     summary: str
 
 
+def _parse_is_important(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return False
+
+
 async def _call_gemini(user_prompt: str) -> str:
     response = None
     for attempt in range(_SERVER_ERROR_RETRY_ATTEMPTS):
@@ -125,7 +135,7 @@ async def classify_post(platform: str, title: str, text: str) -> ClassificationR
         try:
             data = json.loads(response_text)
             return ClassificationResult(
-                is_important=bool(data.get("is_important", False)),
+                is_important=_parse_is_important(data.get("is_important", False)),
                 reason=str(data.get("reason", "")),
                 summary=str(data.get("summary", "")),
             )

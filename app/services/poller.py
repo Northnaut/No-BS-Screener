@@ -125,14 +125,22 @@ async def run_classification_worker(bot: Bot) -> None:
             raise
         except Exception:
             logger.exception("Unexpected error classifying post '%s', skipping it", post["title"])
-            await save_seen_post(post["source_id"], post["post_external_id"], post["title"], post["url"], is_important=False)
+            try:
+                await save_seen_post(post["source_id"], post["post_external_id"], post["title"], post["url"], is_important=False)
+            except Exception:
+                logger.exception("Failed to save fallback result for post '%s', will retry next cycle", post["title"])
             await asyncio.sleep(_GEMINI_CALL_DELAY_SECONDS)
             continue
 
-        await save_seen_post(
-            post["source_id"], post["post_external_id"], post["title"], post["url"],
-            is_important=result.is_important, summary=result.summary,
-        )
+        try:
+            await save_seen_post(
+                post["source_id"], post["post_external_id"], post["title"], post["url"],
+                is_important=result.is_important, summary=result.summary,
+            )
+        except Exception:
+            logger.exception("Failed to save classification result for post '%s', will retry next cycle", post["title"])
+            await asyncio.sleep(_GEMINI_CALL_DELAY_SECONDS)
+            continue
 
         if result.is_important:
             source_label = post["source_title"] or post["platform"]

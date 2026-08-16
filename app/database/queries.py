@@ -149,18 +149,23 @@ async def claim_post_if_unseen(source_id: int, post_external_id: str, title: str
         return cursor.rowcount > 0
 
 
+_AI_TRIAGE_PLATFORMS = ("reddit",)
+
+
 async def get_next_unclassified_post() -> Optional[dict]:
     async with get_connection() as conn:
+        placeholders = ",".join("?" for _ in _AI_TRIAGE_PLATFORMS)
         cursor = await conn.execute(
-            """
+            f"""
             SELECT sp.source_id, sp.post_external_id, sp.title, sp.text, sp.url,
                    s.platform, s.title AS source_title
             FROM seen_posts sp
             JOIN sources s ON s.id = sp.source_id
-            WHERE sp.is_important IS NULL
+            WHERE sp.is_important IS NULL AND s.platform IN ({placeholders})
             ORDER BY sp.created_at ASC
             LIMIT 1
-            """
+            """,
+            _AI_TRIAGE_PLATFORMS,
         )
         row = await cursor.fetchone()
         return dict(row) if row else None
