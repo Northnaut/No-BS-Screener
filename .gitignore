@@ -1,0 +1,9 @@
+.env
+bot.db
+bot.db-journal
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+.claude/settings.local.json
