@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
@@ -15,7 +15,7 @@ _SEND_DELAY_SECONDS = 0.05
 
 
 async def _send_to_subscribers(
-    bot: Bot, source_id: int, text: str,
+    bot: Bot, source_id: int, text_for: Callable[[dict], str],
     link_preview_options: Optional[LinkPreviewOptions] = None, is_short: bool = False,
 ) -> None:
     subscribers = await get_source_subscribers(source_id, is_short=is_short)
@@ -24,6 +24,7 @@ async def _send_to_subscribers(
 
     for subscriber in subscribers:
         tg_id = subscriber["tg_id"]
+        text = text_for(subscriber)
         try:
             await bot.send_message(tg_id, text, link_preview_options=link_preview_options)
         except TelegramForbiddenError:
@@ -49,11 +50,14 @@ async def broadcast(
     bot: Bot, source_id: int, source_label: str, title: str, original_text: str, url: str,
     summary_brief: str, summary_degen: str,
 ) -> None:
-    text = format_alert(source_label, title, original_text, summary_brief, summary_degen, url)
-    await _send_to_subscribers(bot, source_id, text)
+    def text_for(subscriber: dict) -> str:
+        style = subscriber.get("summary_style") or "brief"
+        return format_alert(style, source_label, title, original_text, summary_brief, summary_degen, url)
+
+    await _send_to_subscribers(bot, source_id, text_for)
 
 
 async def broadcast_video(bot: Bot, source_id: int, source_label: str, title: str, url: str, is_short: bool = False) -> None:
     text = format_video_alert(source_label, title, url)
     preview_options = LinkPreviewOptions(url=url, prefer_large_media=True, show_above_text=True)
-    await _send_to_subscribers(bot, source_id, text, link_preview_options=preview_options, is_short=is_short)
+    await _send_to_subscribers(bot, source_id, lambda _sub: text, link_preview_options=preview_options, is_short=is_short)

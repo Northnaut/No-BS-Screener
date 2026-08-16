@@ -7,7 +7,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     builder.button(text="👽 Add Reddit", callback_data="add:reddit")
     builder.button(text="▶️ Add YouTube", callback_data="add:youtube")
     builder.button(text="✈️ Add Telegram", callback_data="add:telegram")
-    builder.button(text="📥 Bulk Add", callback_data="bulk_add")
+    builder.button(text="🎨 Styles", callback_data="menu:styles")
     builder.button(text="📋 My Subscriptions", callback_data="menu:subscriptions")
     builder.adjust(2, 1, 1, 1)
     return builder.as_markup()
@@ -39,6 +39,20 @@ def confirm_unsubscribe_all_keyboard(platform: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="⚠️ Yes, unsubscribe from all", callback_data=f"unsubscribe_all_confirm:{platform}"))
     builder.row(InlineKeyboardButton(text="✖️ Cancel", callback_data=f"subs_tab:{platform}"))
+    return builder.as_markup()
+
+
+def styles_keyboard(current_style: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    options = [
+        ("original", "📰 Original"),
+        ("brief", "⚡ TL;DR"),
+        ("degen", "💬 Plain English"),
+    ]
+    for key, label in options:
+        text = f"✅ {label}" if key == current_style else label
+        builder.row(InlineKeyboardButton(text=text, callback_data=f"set_style:{key}"))
+    builder.row(InlineKeyboardButton(text="⬅️ Back", callback_data="menu:main"))
     return builder.as_markup()
 
 

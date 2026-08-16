@@ -110,7 +110,7 @@ async def get_all_active_sources() -> list[dict]:
 async def get_source_subscribers(source_id: int, is_short: bool = False) -> list[dict]:
     async with get_connection() as conn:
         query = """
-            SELECT u.id, u.tg_id
+            SELECT u.id, u.tg_id, u.summary_style
             FROM subscriptions sub
             JOIN users u ON u.id = sub.user_id
             WHERE sub.source_id = ? AND u.is_active = 1
@@ -120,6 +120,24 @@ async def get_source_subscribers(source_id: int, is_short: bool = False) -> list
         cursor = await conn.execute(query, (source_id,))
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+_VALID_SUMMARY_STYLES = ("original", "brief", "degen")
+_DEFAULT_SUMMARY_STYLE = "brief"
+
+
+async def get_summary_style(tg_id: int) -> str:
+    async with get_connection() as conn:
+        cursor = await conn.execute("SELECT summary_style FROM users WHERE tg_id = ?", (tg_id,))
+        row = await cursor.fetchone()
+        if row is None or not row["summary_style"]:
+            return _DEFAULT_SUMMARY_STYLE
+        return row["summary_style"]
+
+
+async def set_summary_style(tg_id: int, style: str) -> None:
+    async with get_connection() as conn:
+        await conn.execute("UPDATE users SET summary_style = ? WHERE tg_id = ?", (style, tg_id))
 
 
 async def get_youtube_shorts_enabled(tg_id: int) -> bool:

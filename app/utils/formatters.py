@@ -37,23 +37,38 @@ def _truncate(value: str, max_len: int) -> str:
     return value
 
 
-def format_alert(source_label: str, title: str, original_text: str, summary_brief: str, summary_degen: str, url: str) -> str:
+STYLE_LABELS = {
+    "original": "📰 Original",
+    "brief": "⚡ TL;DR",
+    "degen": "💬 Plain English",
+}
+
+
+def format_alert(
+    style: str, source_label: str, title: str, original_text: str, summary_brief: str, summary_degen: str, url: str
+) -> str:
     source_label = _truncate(source_label, _MAX_LABEL_CHARS)
     title = _truncate(title, _MAX_TITLE_CHARS)
     original = _truncate(original_text, _MAX_ORIGINAL_CHARS)
     summary_brief = _truncate(summary_brief, _MAX_SUMMARY_CHARS)
     summary_degen = _truncate(summary_degen, _MAX_SUMMARY_CHARS)
 
+    if style == "original":
+        body = original
+    elif style == "degen":
+        body = summary_degen
+    else:
+        body = summary_brief
+    # fall back through the other variants if the chosen one has no content
+    # (e.g. "original" for a Reddit link-only post with no body text)
+    body = body or summary_brief or original or summary_degen
+
     parts = [
         f"🚨 <b>Important update</b> ({_esc(source_label)})",
         f"<b>{_esc(title)}</b>",
     ]
-    if original:
-        parts.append(f"📰 <b>Original:</b>\n{_esc(original)}")
-    if summary_brief:
-        parts.append(f"⚡ <b>TL;DR:</b> {_esc(summary_brief)}")
-    if summary_degen:
-        parts.append(f"💬 <b>Plain English:</b> {_esc(summary_degen)}")
+    if body:
+        parts.append(_esc(body))
     parts.append(f"🔗 {_esc(url)}")
 
     return "\n\n".join(parts)

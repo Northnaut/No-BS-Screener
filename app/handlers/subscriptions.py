@@ -14,14 +14,17 @@ from app.database.queries import (
     delete_subscription,
     get_or_create_source,
     get_or_create_user,
+    get_summary_style,
     get_user_subscriptions,
     get_youtube_shorts_enabled,
+    set_summary_style,
     toggle_youtube_shorts,
 )
 from app.keyboards.inline import (
     cancel_keyboard,
     confirm_unsubscribe_all_keyboard,
     main_menu_keyboard,
+    styles_keyboard,
     subscriptions_keyboard,
     subscriptions_platform_keyboard,
 )
@@ -37,6 +40,13 @@ from app.states.add_source import AddSourceStates
 from app.utils.formatters import PLATFORM_LABELS, format_subscriptions_list
 from app.utils.telegram import safe_edit_text
 
+_STYLES_TEXT = (
+    "Choose how you want AI alerts written (Reddit/Telegram only — YouTube videos don't use AI):\n\n"
+    "📰 <b>Original</b> — the raw post text, no AI rewrite\n"
+    "⚡ <b>TL;DR</b> — one dry, factual sentence\n"
+    "💬 <b>Plain English</b> — casual, keeps the jargon, no corporate fluff"
+)
+
 logger = logging.getLogger(__name__)
 router = Router()
 
@@ -49,6 +59,27 @@ async def show_main_menu(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await safe_edit_text(callback.message, "Main menu:", reply_markup=main_menu_keyboard())
     await callback.answer()
+
+
+@router.callback_query(F.data == "menu:styles")
+async def show_styles(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    current = await get_summary_style(callback.from_user.id)
+    await safe_edit_text(callback.message, _STYLES_TEXT, reply_markup=styles_keyboard(current))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("set_style:"))
+async def set_style_handler(callback: CallbackQuery) -> None:
+    style = callback.data.split(":")[1]
+    try:
+        await set_summary_style(callback.from_user.id, style)
+    except Exception:
+        logger.exception("Failed to save summary style for user %s", callback.from_user.id)
+        await callback.answer("⚠️ Something went wrong.", show_alert=True)
+        return
+    await safe_edit_text(callback.message, _STYLES_TEXT, reply_markup=styles_keyboard(style))
+    await callback.answer(f"Style set to {style}")
 
 
 @router.callback_query(F.data == "toggle_shorts")
@@ -90,6 +121,8 @@ async def start_add_source(callback: CallbackQuery, state: FSMContext) -> None:
             "Example:\n<code>@CoinDesk</code> or <code>https://t.me/CoinDesk</code>"
         )
 
+    prompt += f"\n\n💡 You can send several at once (one per line, up to {_BULK_MAX_ITEMS}) and I'll add them all."
+
     await safe_edit_text(
         callback.message,
         prompt,
@@ -98,13 +131,31 @@ async def start_add_source(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+def _split_bulk_input(raw: str) -> list[str]:
+    tokens: list[str] = []
+    for line in raw.splitlines():
+        for piece in re.split(r"[,\s]+", line.strip()):
+            piece = piece.strip()
+            if piece:
+                tokens.append(piece)
+    return tokens
+
+
+async def _validate_for_platform(platform: str, raw_item: str) -> Optional[ValidatedSource]:
+    if platform == "reddit":
+        return await validate_reddit_link(raw_item)
+    if platform == "youtube":
+        return await validate_youtube_link(raw_item)
+    return await validate_telegram_link(get_userbot_client(), raw_item)
+
+
 @router.message(AddSourceStates.waiting_for_link)
 async def receive_source_link(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     platform = data.get("platform")
-    raw_link = (message.text or "").strip()
+    raw = (message.text or "").strip()
 
-    if not raw_link:
+    if not raw:
         await message.answer("Please send a valid link as text.")
         return
 
@@ -116,15 +167,26 @@ async def receive_source_link(message: Message, state: FSMContext) -> None:
         await state.clear()
         return
 
+    items = _split_bulk_input(raw)
+    if not items:
+        await message.answer("Please send a valid link as text.")
+        return
+
+    if len(items) > _BULK_MAX_ITEMS:
+        await message.answer(f"That's {len(items)} links — please send at most {_BULK_MAX_ITEMS} at a time.")
+        return
+
+    if len(items) == 1:
+        await _add_single_source(message, state, platform, items[0])
+    else:
+        await _add_multiple_sources(message, state, platform, items)
+
+
+async def _add_single_source(message: Message, state: FSMContext, platform: str, raw_link: str) -> None:
     status_message = await message.answer("🔎 Validating link...")
 
     try:
-        if platform == "reddit":
-            validated = await validate_reddit_link(raw_link)
-        elif platform == "youtube":
-            validated = await validate_youtube_link(raw_link)
-        else:
-            validated = await validate_telegram_link(get_userbot_client(), raw_link)
+        validated = await _validate_for_platform(platform, raw_link)
     except Exception:
         logger.exception("Unexpected error validating link '%s' for platform %s", raw_link, platform)
         await safe_edit_text(
@@ -179,67 +241,7 @@ async def receive_source_link(message: Message, state: FSMContext) -> None:
         )
 
 
-@router.callback_query(F.data == "bulk_add")
-async def start_bulk_add(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.set_state(AddSourceStates.waiting_for_bulk_list)
-    await safe_edit_text(
-        callback.message,
-        "Send me a list of links — Reddit, YouTube, and/or Telegram, mixed is fine. "
-        f"One per line (or separated by spaces/commas), up to {_BULK_MAX_ITEMS} at a time. "
-        "I'll figure out the platform for each and subscribe you to all of them.\n\n"
-        "Example:\n"
-        "<code>r/CryptoCurrency\n"
-        "https://www.youtube.com/@MrBeast\n"
-        "@CoinDesk</code>",
-        reply_markup=cancel_keyboard(),
-    )
-    await callback.answer()
-
-
-def _split_bulk_input(raw: str) -> list[str]:
-    tokens: list[str] = []
-    for line in raw.splitlines():
-        for piece in re.split(r"[,\s]+", line.strip()):
-            piece = piece.strip()
-            if piece:
-                tokens.append(piece)
-    return tokens
-
-
-async def _detect_and_validate(raw_item: str) -> Optional[ValidatedSource]:
-    validated = await validate_reddit_link(raw_item)
-    if validated:
-        return validated
-
-    validated = await validate_youtube_link(raw_item)
-    if validated:
-        return validated
-
-    if extract_external_id("telegram", raw_item):
-        return await validate_telegram_link(get_userbot_client(), raw_item)
-
-    return None
-
-
-@router.message(AddSourceStates.waiting_for_bulk_list)
-async def receive_bulk_list(message: Message, state: FSMContext) -> None:
-    raw = (message.text or "").strip()
-    if not raw:
-        await message.answer("Please send a list of links as text.")
-        return
-
-    items = _split_bulk_input(raw)
-    if not items:
-        await message.answer(
-            "Didn't find any links in that message. Try again, or press Cancel.",
-            reply_markup=cancel_keyboard(),
-        )
-        return
-
-    if len(items) > _BULK_MAX_ITEMS:
-        await message.answer(f"That's {len(items)} items — please send at most {_BULK_MAX_ITEMS} at a time.")
-        return
-
+async def _add_multiple_sources(message: Message, state: FSMContext, platform: str, items: list[str]) -> None:
     status_message = await message.answer(f"🔎 Checking {len(items)} link(s), this may take a bit...")
 
     try:
@@ -255,7 +257,7 @@ async def receive_bulk_list(message: Message, state: FSMContext) -> None:
 
     for item in items:
         try:
-            validated = await _detect_and_validate(item)
+            validated = await _validate_for_platform(platform, item)
         except Exception:
             logger.exception("Unexpected error validating bulk item '%s'", item)
             validated = None
