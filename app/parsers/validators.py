@@ -17,16 +17,16 @@ _REDDIT_RETRY_ATTEMPTS = 2
 _REDDIT_RETRY_DELAY_SECONDS = 2
 
 _REDDIT_PATTERNS = [
-    re.compile(r"^r/([A-Za-z0-9_]+)/?$"),
-    re.compile(r"^/r/([A-Za-z0-9_]+)/?$"),
-    re.compile(r"^(?:https?://)?(?:www\.)?reddit\.com/r/([A-Za-z0-9_]+)/?.*$"),
+    re.compile(r"^r/([A-Za-z0-9_]+)/?$", re.IGNORECASE),
+    re.compile(r"^/r/([A-Za-z0-9_]+)/?$", re.IGNORECASE),
+    re.compile(r"^(?:https?://)?(?:www\.)?reddit\.com/r/([A-Za-z0-9_]+)/?.*$", re.IGNORECASE),
 ]
 
 _YOUTUBE_CHANNEL_ID_PATTERN = re.compile(
-    r"^(?:https?://)?(?:www\.)?youtube\.com/channel/(UC[A-Za-z0-9_-]{22})/?.*$"
+    r"^(?:https?://)?(?:www\.)?youtube\.com/channel/(UC[A-Za-z0-9_-]{22})/?.*$", re.IGNORECASE
 )
 _YOUTUBE_HANDLE_PATTERN = re.compile(
-    r"^(?:https?://)?(?:www\.)?youtube\.com/@([A-Za-z0-9_.-]+)/?.*$"
+    r"^(?:https?://)?(?:www\.)?youtube\.com/@([A-Za-z0-9_.-]+)/?.*$", re.IGNORECASE
 )
 _YOUTUBE_CANONICAL_CHANNEL_ID = re.compile(
     r'<link rel="canonical" href="https://www\.youtube\.com/channel/(UC[A-Za-z0-9_-]{22})">'
