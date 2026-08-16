@@ -47,7 +47,7 @@ def styles_keyboard(current_style: str) -> InlineKeyboardMarkup:
     options = [
         ("original", "📰 Original"),
         ("brief", "⚡ TL;DR"),
-        ("degen", "💬 Plain English"),
+        ("degen", "💬 Casual"),
     ]
     for key, label in options:
         text = f"✅ {label}" if key == current_style else label

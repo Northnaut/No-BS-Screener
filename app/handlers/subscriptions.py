@@ -44,7 +44,7 @@ _STYLES_TEXT = (
     "Choose how you want AI alerts written (Reddit/Telegram only — YouTube videos don't use AI):\n\n"
     "📰 <b>Original</b> — the raw post text, no AI rewrite\n"
     "⚡ <b>TL;DR</b> — one dry, factual sentence\n"
-    "💬 <b>Plain English</b> — casual, keeps the jargon, no corporate fluff"
+    "💬 <b>Casual</b> — simple, casual language, keeps the jargon, no corporate fluff"
 )
 
 logger = logging.getLogger(__name__)
@@ -230,13 +230,13 @@ async def _add_single_source(message: Message, state: FSMContext, platform: str,
     if added:
         await safe_edit_text(
             status_message,
-            f"✅ Subscribed to <b>{html.escape(validated.title, quote=True)}</b>!",
+            f"✅ Subscribed to <b>{html.escape(validated.title, quote=False)}</b>!",
             reply_markup=main_menu_keyboard(),
         )
     else:
         await safe_edit_text(
             status_message,
-            f"ℹ️ You're already subscribed to <b>{html.escape(validated.title, quote=True)}</b>.",
+            f"ℹ️ You're already subscribed to <b>{html.escape(validated.title, quote=False)}</b>.",
             reply_markup=main_menu_keyboard(),
         )
 
@@ -293,9 +293,9 @@ async def _add_multiple_sources(message: Message, state: FSMContext, platform: s
         f"❌ Not found: {len(failed)}",
     ]
     if added:
-        lines.append("\n<b>Added:</b>\n" + "\n".join(f"• {html.escape(t, quote=True)}" for t in added))
+        lines.append("\n<b>Added:</b>\n" + "\n".join(f"• {html.escape(t, quote=False)}" for t in added))
     if failed:
-        lines.append("\n<b>Couldn't find:</b>\n" + "\n".join(f"• {html.escape(t, quote=True)}" for t in failed))
+        lines.append("\n<b>Couldn't find:</b>\n" + "\n".join(f"• {html.escape(t, quote=False)}" for t in failed))
 
     await safe_edit_text(status_message, "\n".join(lines), reply_markup=main_menu_keyboard())
 
@@ -429,5 +429,5 @@ async def receive_unsubscribe_link(message: Message, state: FSMContext) -> None:
         return
 
     await state.clear()
-    await message.answer(f"✅ Unsubscribed from <b>{html.escape(match['title'] or match['url'], quote=True)}</b>.")
+    await message.answer(f"✅ Unsubscribed from <b>{html.escape(match['title'] or match['url'], quote=False)}</b>.")
     await _send_subscriptions_tab(message, message.from_user.id, message.from_user.username, platform)
