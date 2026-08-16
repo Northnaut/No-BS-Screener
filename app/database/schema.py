@@ -77,4 +77,5 @@ async def init_db() -> None:
             await conn.execute(statement)
         await _ensure_column(conn, "seen_posts", "text", "TEXT NOT NULL DEFAULT ''")
         await _ensure_column(conn, "users", "youtube_shorts_enabled", "INTEGER NOT NULL DEFAULT 1")
+        await _ensure_column(conn, "seen_posts", "summary_degen", "TEXT NULL")
     logger.info("Database initialized (schema ensured)")

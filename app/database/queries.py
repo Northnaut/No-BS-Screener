@@ -80,6 +80,18 @@ async def delete_subscription(user_id: int, source_id: int) -> None:
         )
 
 
+async def delete_all_subscriptions(user_id: int, platform: str) -> int:
+    async with get_connection() as conn:
+        cursor = await conn.execute(
+            """
+            DELETE FROM subscriptions
+            WHERE user_id = ? AND source_id IN (SELECT id FROM sources WHERE platform = ?)
+            """,
+            (user_id, platform),
+        )
+        return cursor.rowcount
+
+
 async def get_all_active_sources() -> list[dict]:
     async with get_connection() as conn:
         cursor = await conn.execute(
@@ -178,15 +190,17 @@ async def save_seen_post(
     url: str,
     is_important: Optional[bool] = None,
     summary: Optional[str] = None,
+    summary_degen: Optional[str] = None,
 ) -> None:
     async with get_connection() as conn:
         await conn.execute(
             """
-            INSERT INTO seen_posts (source_id, post_external_id, title, url, is_important, summary, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO seen_posts (source_id, post_external_id, title, url, is_important, summary, summary_degen, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source_id, post_external_id) DO UPDATE SET
                 is_important = excluded.is_important,
                 summary = excluded.summary,
+                summary_degen = excluded.summary_degen,
                 text = ''
             """,
             (
@@ -196,6 +210,7 @@ async def save_seen_post(
                 url,
                 None if is_important is None else int(is_important),
                 summary,
+                summary_degen,
                 _now(),
             ),
         )

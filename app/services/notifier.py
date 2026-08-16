@@ -45,8 +45,11 @@ async def _send_to_subscribers(
         await asyncio.sleep(_SEND_DELAY_SECONDS)
 
 
-async def broadcast(bot: Bot, source_id: int, source_label: str, title: str, url: str, summary: str) -> None:
-    text = format_alert(source_label, title, summary, url)
+async def broadcast(
+    bot: Bot, source_id: int, source_label: str, title: str, original_text: str, url: str,
+    summary_brief: str, summary_degen: str,
+) -> None:
+    text = format_alert(source_label, title, original_text, summary_brief, summary_degen, url)
     await _send_to_subscribers(bot, source_id, text)
 
 

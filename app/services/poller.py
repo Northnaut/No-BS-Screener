@@ -146,7 +146,7 @@ async def run_classification_worker(bot: Bot) -> None:
         try:
             await save_seen_post(
                 post["source_id"], post["post_external_id"], post["title"], post["url"],
-                is_important=result.is_important, summary=result.summary,
+                is_important=result.is_important, summary=result.summary_brief, summary_degen=result.summary_degen,
             )
         except Exception:
             logger.exception("Failed to save classification result for post '%s', will retry next cycle", post["title"])
@@ -156,7 +156,10 @@ async def run_classification_worker(bot: Bot) -> None:
         if result.is_important:
             source_label = post["source_title"] or post["platform"]
             try:
-                await broadcast(bot, post["source_id"], source_label, post["title"], post["url"], result.summary)
+                await broadcast(
+                    bot, post["source_id"], source_label, post["title"], post["text"], post["url"],
+                    result.summary_brief, result.summary_degen,
+                )
             except Exception:
                 logger.exception("Failed to broadcast alert for post '%s'", post["title"])
 

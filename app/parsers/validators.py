@@ -6,7 +6,10 @@ from typing import Optional
 
 import aiohttp
 from telethon import TelegramClient
+from telethon.errors import FloodWaitError
 from telethon.tl.types import Channel as TelethonChannel
+
+from app.services import userbot
 
 logger = logging.getLogger(__name__)
 
@@ -210,8 +213,18 @@ async def validate_telegram_link(client: Optional[TelegramClient], raw_link: str
     if not username or client is None:
         return None
 
+    if userbot.flood_wait_remaining() > 0:
+        logger.warning("Skipping Telegram validation for @%s: userbot is in a flood-wait cooldown", username)
+        return None
+
     try:
         entity = await client.get_entity(username)
+    except FloodWaitError as exc:
+        userbot.register_flood_wait(exc.seconds)
+        logger.warning(
+            "Telegram flood wait while validating @%s: pausing all Telegram usage for %ds", username, exc.seconds
+        )
+        return None
     except Exception:
         logger.exception("Error resolving Telegram channel @%s", username)
         return None

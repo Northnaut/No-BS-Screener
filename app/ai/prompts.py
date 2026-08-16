@@ -20,8 +20,19 @@ Mark as NOISE if the post is:
 - General discussion with no concrete news
 - Off-topic (unrelated to crypto markets)
 
+If IMPORTANT, also write it up in two different styles:
+- summary_brief: the shortest possible neutral, dry, factual statement of what happened.
+  No adjectives, no hype, no filler — just the fact. One sentence, ideally under 20 words.
+- summary_degen: a short, plain-spoken explanation in casual crypto/web3 language, like
+  explaining it to a friend who already trades but doesn't want to read a press release.
+  Keep real technical terms (ticker symbols, protocol names, "delisting", "hard fork" etc.)
+  — don't dumb them down or explain basics like what a blockchain is. Just cut corporate/
+  marketing fluff and speak plainly and directly. 1-3 sentences max.
+
+If NOISE, leave both of those as empty strings.
+
 Respond with ONLY a JSON object in this exact shape, no other text:
-{"is_important": true or false, "reason": "one short sentence explaining why", "summary": "a 1-2 sentence summary of the news, only if is_important is true, otherwise empty string"}
+{"is_important": true or false, "reason": "one short sentence explaining why", "summary_brief": "...", "summary_degen": "..."}
 """
 
 

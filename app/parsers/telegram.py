@@ -1,24 +1,18 @@
 import logging
-import time
 from datetime import timezone
 
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 
 from app.parsers.base import FetchedPost
+from app.services import userbot
 
 logger = logging.getLogger(__name__)
 
-# Shared across all channels: a FloodWaitError on this account blocks further
-# calls regardless of which channel triggered it, so all fetches must back off.
-_flood_wait_until = 0.0
-
 
 async def fetch_telegram_posts(client: TelegramClient, channel_username: str, limit: int = 25) -> list[FetchedPost]:
-    global _flood_wait_until
-
-    if time.monotonic() < _flood_wait_until:
-        remaining = int(_flood_wait_until - time.monotonic())
+    remaining = userbot.flood_wait_remaining()
+    if remaining > 0:
         raise RuntimeError(
             f"Telegram userbot is in a flood-wait cooldown ({remaining}s remaining), skipping @{channel_username}"
         )
@@ -27,9 +21,9 @@ async def fetch_telegram_posts(client: TelegramClient, channel_username: str, li
         entity = await client.get_entity(channel_username)
         messages = await client.get_messages(entity, limit=limit)
     except FloodWaitError as exc:
-        _flood_wait_until = time.monotonic() + exc.seconds
+        userbot.register_flood_wait(exc.seconds)
         logger.warning(
-            "Telegram flood wait triggered by @%s: pausing all Telegram fetches for %ds",
+            "Telegram flood wait triggered by @%s: pausing all Telegram usage for %ds",
             channel_username, exc.seconds,
         )
         raise RuntimeError(f"Telegram flood wait ({exc.seconds}s) fetching @{channel_username}") from exc

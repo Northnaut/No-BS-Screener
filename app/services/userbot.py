@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Optional
 
 from telethon import TelegramClient
@@ -9,6 +10,21 @@ from app.config import TG_API_HASH, TG_API_ID, TG_SESSION_STRING
 logger = logging.getLogger(__name__)
 
 _client: Optional[TelegramClient] = None
+
+# Shared across every caller (poller fetches, link validation, bulk-add) since a
+# FloodWaitError on this account blocks the whole session regardless of which
+# call triggered it.
+_flood_wait_until = 0.0
+
+
+def flood_wait_remaining() -> int:
+    """Seconds left in an active Telegram flood-wait cooldown, 0 if none."""
+    return max(0, int(_flood_wait_until - time.monotonic()))
+
+
+def register_flood_wait(seconds: float) -> None:
+    global _flood_wait_until
+    _flood_wait_until = time.monotonic() + seconds
 
 
 def is_userbot_configured() -> bool:

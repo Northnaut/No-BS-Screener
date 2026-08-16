@@ -39,7 +39,8 @@ class _ProviderUnavailable(Exception):
 class ClassificationResult:
     is_important: bool
     reason: str
-    summary: str
+    summary_brief: str
+    summary_degen: str
 
 
 def _parse_is_important(value: object) -> bool:
@@ -137,7 +138,8 @@ async def classify_post(platform: str, title: str, text: str) -> ClassificationR
             return ClassificationResult(
                 is_important=_parse_is_important(data.get("is_important", False)),
                 reason=str(data.get("reason", "")),
-                summary=str(data.get("summary", "")),
+                summary_brief=str(data.get("summary_brief", "")),
+                summary_degen=str(data.get("summary_degen", "")),
             )
         except (json.JSONDecodeError, AttributeError, TypeError):
             logger.exception("Failed to parse %s response for post '%s': %r", name, title, response_text)
@@ -149,4 +151,4 @@ async def classify_post(platform: str, title: str, text: str) -> ClassificationR
         raise QuotaExceededError("All configured AI providers are rate-limited")
 
     logger.error("All AI providers failed to classify post '%s'", title)
-    return ClassificationResult(is_important=False, reason="All AI providers failed", summary="")
+    return ClassificationResult(is_important=False, reason="All AI providers failed", summary_brief="", summary_degen="")
