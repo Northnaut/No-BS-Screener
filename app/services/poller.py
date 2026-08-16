@@ -1,8 +1,10 @@
 import asyncio
 import logging
+from typing import Optional
 
 import aiohttp
 from aiogram import Bot
+from telethon import TelegramClient
 
 from app.ai.client import QuotaExceededError, classify_post
 from app.database.queries import (
@@ -15,6 +17,7 @@ from app.database.queries import (
 )
 from app.parsers.base import FetchedPost
 from app.parsers.reddit import fetch_reddit_posts
+from app.parsers.telegram import fetch_telegram_posts
 from app.parsers.youtube import fetch_youtube_videos
 from app.services.notifier import broadcast, broadcast_video
 
@@ -25,22 +28,30 @@ _EMPTY_QUEUE_POLL_SECONDS = 5
 _QUOTA_BACKOFF_SECONDS = 30
 
 
-async def _fetch_source_posts(session: aiohttp.ClientSession, source: dict) -> list[FetchedPost]:
+async def _fetch_source_posts(
+    session: aiohttp.ClientSession, source: dict, telegram_client: Optional[TelegramClient] = None
+) -> list[FetchedPost]:
     if source["platform"] == "reddit":
         return await fetch_reddit_posts(session, source["external_id"])
     if source["platform"] == "youtube":
         return await fetch_youtube_videos(source["external_id"])
+    if source["platform"] == "telegram":
+        if telegram_client is None:
+            raise RuntimeError("Telegram userbot is not connected")
+        return await fetch_telegram_posts(telegram_client, source["external_id"])
     logger.warning("Unknown platform '%s' for source %s", source["platform"], source["id"])
     return []
 
 
-async def _discover_source(bot: Bot, session: aiohttp.ClientSession, source: dict) -> None:
-    """Fetch a source's feed. Reddit posts are queued for AI triage; YouTube videos alert directly."""
+async def _discover_source(
+    bot: Bot, session: aiohttp.ClientSession, source: dict, telegram_client: Optional[TelegramClient] = None
+) -> None:
+    """Fetch a source's feed. Reddit/Telegram posts are queued for AI triage; YouTube videos alert directly."""
     source_id = source["id"]
     platform = source["platform"]
 
     try:
-        posts = await _fetch_source_posts(session, source)
+        posts = await _fetch_source_posts(session, source, telegram_client)
     except Exception:
         logger.exception("Failed to fetch posts for source %s (%s:%s)", source_id, platform, source["external_id"])
         await mark_source_checked(source_id, success=False)
@@ -79,8 +90,8 @@ async def _discover_source(bot: Bot, session: aiohttp.ClientSession, source: dic
     await mark_source_checked(source_id, success=True)
 
 
-async def run_polling_cycle(bot: Bot) -> None:
-    """Fast discovery pass: fetch all sources, queue Reddit posts for AI triage, alert YouTube videos directly."""
+async def run_polling_cycle(bot: Bot, telegram_client: Optional[TelegramClient] = None) -> None:
+    """Fast discovery pass: fetch all sources, queue Reddit/Telegram posts for AI triage, alert YouTube videos directly."""
     sources = await get_all_active_sources()
     if not sources:
         logger.info("No active sources to poll")
@@ -91,7 +102,7 @@ async def run_polling_cycle(bot: Bot) -> None:
     async with aiohttp.ClientSession() as session:
         for source in sources:
             try:
-                await _discover_source(bot, session, source)
+                await _discover_source(bot, session, source, telegram_client)
             except Exception:
                 logger.exception("Unexpected error discovering source %s", source["id"])
                 continue

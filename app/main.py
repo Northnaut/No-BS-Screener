@@ -13,6 +13,7 @@ from app.database.schema import init_db
 from app.handlers import register_handlers
 from app.middlewares.dedup import DeduplicationMiddleware
 from app.services.poller import run_classification_worker, run_cleanup, run_polling_cycle
+from app.services.userbot import start_userbot, stop_userbot
 from app.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,8 @@ async def main() -> None:
         logger.exception("Failed to initialize database")
         raise
 
+    telegram_client = await start_userbot()
+
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
     dp.update.outer_middleware(DeduplicationMiddleware())
@@ -36,7 +39,7 @@ async def main() -> None:
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         run_polling_cycle, "interval", minutes=POLL_INTERVAL_MINUTES,
-        args=[bot], id="discovery_cycle", max_instances=1, coalesce=True,
+        args=[bot, telegram_client], id="discovery_cycle", max_instances=1, coalesce=True,
     )
     scheduler.add_job(run_cleanup, "interval", hours=24, id="cleanup")
     scheduler.start()
@@ -63,6 +66,7 @@ async def main() -> None:
             pass
         scheduler.shutdown(wait=False)
         await bot.session.close()
+        await stop_userbot()
 
 
 if __name__ == "__main__":

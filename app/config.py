@@ -20,3 +20,9 @@ GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 DB_PATH: str = os.getenv("DB_PATH", "bot.db")
 POLL_INTERVAL_MINUTES: int = int(os.getenv("POLL_INTERVAL_MINUTES", "15"))
 POSTS_PER_FETCH: int = int(os.getenv("POSTS_PER_FETCH", "25"))
+
+# Telegram userbot (MTProto) credentials, used to fetch posts from Telegram channels.
+# Optional: if unset, Telegram channel sources are skipped. See scripts/telegram_login.py.
+TG_API_ID: str = os.getenv("TG_API_ID", "")
+TG_API_HASH: str = os.getenv("TG_API_HASH", "")
+TG_SESSION_STRING: str = os.getenv("TG_SESSION_STRING", "")

@@ -19,9 +19,15 @@ from app.keyboards.inline import (
     subscriptions_keyboard,
     subscriptions_platform_keyboard,
 )
-from app.parsers.validators import extract_external_id, validate_reddit_link, validate_youtube_link
+from app.parsers.validators import (
+    extract_external_id,
+    validate_reddit_link,
+    validate_telegram_link,
+    validate_youtube_link,
+)
+from app.services.userbot import get_userbot_client
 from app.states.add_source import AddSourceStates
-from app.utils.formatters import format_subscriptions_list
+from app.utils.formatters import PLATFORM_LABELS, format_subscriptions_list
 from app.utils.telegram import safe_edit_text
 
 logger = logging.getLogger(__name__)
@@ -52,7 +58,7 @@ async def noop_callback(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data.in_({"add:reddit", "add:youtube"}))
+@router.callback_query(F.data.in_({"add:reddit", "add:youtube", "add:telegram"}))
 async def start_add_source(callback: CallbackQuery, state: FSMContext) -> None:
     platform = callback.data.split(":")[1]
     await state.update_data(platform=platform)
@@ -63,10 +69,15 @@ async def start_add_source(callback: CallbackQuery, state: FSMContext) -> None:
             "Send me a Reddit link.\n\n"
             "Example:\n<code>https://www.reddit.com/r/CryptoCurrency/</code>"
         )
-    else:
+    elif platform == "youtube":
         prompt = (
             "Send me a YouTube channel link.\n\n"
             "Example:\n<code>https://www.youtube.com/@MrBeast</code>"
+        )
+    else:
+        prompt = (
+            "Send me a Telegram channel link or @username.\n\n"
+            "Example:\n<code>@CoinDesk</code> or <code>https://t.me/CoinDesk</code>"
         )
 
     await safe_edit_text(
@@ -87,13 +98,23 @@ async def receive_source_link(message: Message, state: FSMContext) -> None:
         await message.answer("Please send a valid link as text.")
         return
 
+    if platform == "telegram" and get_userbot_client() is None:
+        await message.answer(
+            "⚠️ Telegram integration isn't set up yet. Ask the bot owner to finish setup.",
+            reply_markup=main_menu_keyboard(),
+        )
+        await state.clear()
+        return
+
     status_message = await message.answer("🔎 Validating link...")
 
     try:
         if platform == "reddit":
             validated = await validate_reddit_link(raw_link)
-        else:
+        elif platform == "youtube":
             validated = await validate_youtube_link(raw_link)
+        else:
+            validated = await validate_telegram_link(get_userbot_client(), raw_link)
     except Exception:
         logger.exception("Unexpected error validating link '%s' for platform %s", raw_link, platform)
         await safe_edit_text(
@@ -103,11 +124,12 @@ async def receive_source_link(message: Message, state: FSMContext) -> None:
         return
 
     if not validated:
-        example = (
-            "https://www.reddit.com/r/CryptoCurrency/"
-            if platform == "reddit"
-            else "https://www.youtube.com/@MrBeast"
-        )
+        if platform == "reddit":
+            example = "https://www.reddit.com/r/CryptoCurrency/"
+        elif platform == "youtube":
+            example = "https://www.youtube.com/@MrBeast"
+        else:
+            example = "@CoinDesk"
         await safe_edit_text(
             status_message,
             "❌ Couldn't find that source. Double-check the link and try again, "
@@ -189,7 +211,7 @@ async def unsubscribe_prompt(callback: CallbackQuery, state: FSMContext) -> None
     await state.update_data(subs_tab=platform, unsubscribe_platform=platform)
     await state.set_state(AddSourceStates.waiting_for_unsubscribe_link)
 
-    platform_label = "Reddit" if platform == "reddit" else "YouTube"
+    platform_label = PLATFORM_LABELS.get(platform, platform)
     await safe_edit_text(
         callback.message,
         f"Send me the {platform_label} link you want to unsubscribe from "

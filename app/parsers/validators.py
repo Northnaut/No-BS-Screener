@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 import aiohttp
+from telethon import TelegramClient
+from telethon.tl.types import Channel as TelethonChannel
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,11 @@ _YOUTUBE_CANONICAL_CHANNEL_ID = re.compile(
 )
 _YOUTUBE_CHANNEL_ID_IN_HTML = re.compile(r'"channelId":"(UC[A-Za-z0-9_-]{22})"')
 
+_TELEGRAM_PATTERNS = [
+    re.compile(r"^@([A-Za-z][A-Za-z0-9_]{4,31})$", re.IGNORECASE),
+    re.compile(r"^(?:https?://)?t\.me/([A-Za-z][A-Za-z0-9_]{4,31})/?$", re.IGNORECASE),
+]
+
 
 @dataclass
 class ValidatedSource:
@@ -57,11 +64,22 @@ def _extract_youtube_channel_id(raw: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def _extract_telegram_channel(raw: str) -> Optional[str]:
+    raw = raw.strip()
+    for pattern in _TELEGRAM_PATTERNS:
+        match = pattern.match(raw)
+        if match:
+            return match.group(1)
+    return None
+
+
 def extract_external_id(platform: str, raw_link: str) -> Optional[str]:
     if platform == "reddit":
         return _extract_reddit_subreddit(raw_link)
     if platform == "youtube":
         return _extract_youtube_channel_id(raw_link)
+    if platform == "telegram":
+        return _extract_telegram_channel(raw_link)
     return None
 
 
@@ -184,4 +202,29 @@ async def validate_youtube_link(raw_link: str) -> Optional[ValidatedSource]:
         external_id=channel_id,
         title=title,
         url=f"https://www.youtube.com/channel/{channel_id}",
+    )
+
+
+async def validate_telegram_link(client: Optional[TelegramClient], raw_link: str) -> Optional[ValidatedSource]:
+    username = _extract_telegram_channel(raw_link)
+    if not username or client is None:
+        return None
+
+    try:
+        entity = await client.get_entity(username)
+    except Exception:
+        logger.exception("Error resolving Telegram channel @%s", username)
+        return None
+
+    if not isinstance(entity, TelethonChannel):
+        return None
+
+    resolved_username = entity.username or username
+    title = entity.title or f"@{resolved_username}"
+
+    return ValidatedSource(
+        platform="telegram",
+        external_id=resolved_username,
+        title=title,
+        url=f"https://t.me/{resolved_username}",
     )

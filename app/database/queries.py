@@ -149,7 +149,7 @@ async def claim_post_if_unseen(source_id: int, post_external_id: str, title: str
         return cursor.rowcount > 0
 
 
-_AI_TRIAGE_PLATFORMS = ("reddit",)
+_AI_TRIAGE_PLATFORMS = ("reddit", "telegram")
 
 
 async def get_next_unclassified_post() -> Optional[dict]:

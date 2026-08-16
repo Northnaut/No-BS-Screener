@@ -1,6 +1,7 @@
 PLATFORM_LABELS = {
     "reddit": "Reddit",
     "youtube": "YouTube",
+    "telegram": "Telegram",
 }
 
 

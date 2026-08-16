@@ -6,8 +6,9 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="➕ Add Reddit", callback_data="add:reddit")
     builder.button(text="➕ Add YouTube", callback_data="add:youtube")
+    builder.button(text="➕ Add Telegram", callback_data="add:telegram")
     builder.button(text="📋 My Subscriptions", callback_data="menu:subscriptions")
-    builder.adjust(2, 1)
+    builder.adjust(2, 1, 1)
     return builder.as_markup()
 
 
@@ -15,6 +16,7 @@ def subscriptions_platform_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="🔴 Reddit subscriptions", callback_data="subs_tab:reddit")
     builder.button(text="▶️ YouTube subscriptions", callback_data="subs_tab:youtube")
+    builder.button(text="📢 Telegram subscriptions", callback_data="subs_tab:telegram")
     builder.button(text="⬅️ Back", callback_data="menu:main")
     builder.adjust(1)
     return builder.as_markup()

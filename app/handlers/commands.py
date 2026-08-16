@@ -49,7 +49,7 @@ async def cmd_menu(message: Message, state: FSMContext) -> None:
 async def cmd_help(message: Message) -> None:
     await message.answer(
         "ℹ️ <b>How it works:</b>\n\n"
-        "1. Add a Reddit or YouTube source via the menu.\n"
+        "1. Add a Reddit, YouTube, or Telegram source via the menu.\n"
         "2. I periodically check it for new posts/videos.\n"
         "3. AI filters out noise and memes.\n"
         "4. You get notified only about genuinely important news.\n\n"
