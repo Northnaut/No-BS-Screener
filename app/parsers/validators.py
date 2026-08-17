@@ -121,7 +121,43 @@ async def fetch_reddit_json(session: aiohttp.ClientSession, subreddit: str, path
     return None
 
 
+async def fetch_reddit_rss(session: aiohttp.ClientSession, subreddit: str, path: str = "new/.rss?limit=1") -> Optional[str]:
+    headers = {
+        "User-Agent": _USER_AGENT,
+        "Accept": "application/atom+xml, application/rss+xml, application/xml, text/xml",
+    }
+
+    for attempt in range(_REDDIT_RETRY_ATTEMPTS):
+        for domain in _REDDIT_DOMAINS:
+            url = f"https://{domain}/r/{subreddit}/{path}"
+            try:
+                async with session.get(url, headers=headers, timeout=_REQUEST_TIMEOUT) as resp:
+                    if resp.status != 200:
+                        logger.warning("Reddit RSS request failed for r/%s via %s: HTTP %s", subreddit, domain, resp.status)
+                        continue
+                    text = await resp.text()
+                    if "<feed" not in text and "<rss" not in text:
+                        logger.warning(
+                            "Reddit RSS request for r/%s via %s returned a non-feed response (likely blocked/redirected)",
+                            subreddit, domain,
+                        )
+                        continue
+                    return text
+            except Exception:
+                logger.exception("Error fetching Reddit RSS for r/%s via %s", subreddit, domain)
+                continue
+
+        if attempt < _REDDIT_RETRY_ATTEMPTS - 1:
+            await asyncio.sleep(_REDDIT_RETRY_DELAY_SECONDS)
+
+    return None
+
+
 async def _reddit_subreddit_exists(session: aiohttp.ClientSession, subreddit: str) -> bool:
+    rss_text = await fetch_reddit_rss(session, subreddit)
+    if rss_text is not None:
+        return True
+
     data = await fetch_reddit_json(session, subreddit)
     if data is None:
         return False
