@@ -8,13 +8,27 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.config import BOT_TOKEN, POLL_INTERVAL_MINUTES
+from app.config import (
+    BOT_TOKEN,
+    CLASSIFICATION_BATCH_INTERVAL_MINUTES,
+    NEWSPAPER_ALERT_INTERVAL_MINUTES,
+    NEWSPAPER_POLL_INTERVAL_MINUTES,
+    POLL_INTERVAL_MINUTES,
+)
+from app.database.connection import close_connection_pragmas, init_connection_pragmas
 from app.database.schema import init_db
 from app.handlers import register_handlers
 from app.middlewares.dedup import DeduplicationMiddleware
-from app.services.poller import run_classification_worker, run_cleanup, run_polling_cycle
+from app.parsers.newspapers import seed_newspaper_sources
+from app.services.notifier import dispatch_newspaper_alerts, run_outgoing_dispatcher
+from app.services.poller import (
+    run_classification_batch,
+    run_cleanup,
+    run_newspaper_discovery_cycle,
+    run_polling_cycle,
+)
 from app.services.userbot import start_userbot, stop_userbot
-from app.utils.logger import setup_logging
+from app.utils.logger import cleanup_old_logs, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +38,16 @@ async def main() -> None:
     logger.info("Starting No BS Screener bot...")
 
     try:
+        await init_connection_pragmas()
         await init_db()
     except Exception:
         logger.exception("Failed to initialize database")
+        raise
+
+    try:
+        await seed_newspaper_sources()
+    except Exception:
+        logger.exception("Failed to seed newspaper sources")
         raise
 
     telegram_client = await start_userbot()
@@ -41,11 +62,34 @@ async def main() -> None:
         run_polling_cycle, "interval", minutes=POLL_INTERVAL_MINUTES,
         args=[bot, telegram_client], id="discovery_cycle", max_instances=1, coalesce=True,
     )
+    scheduler.add_job(
+        run_newspaper_discovery_cycle, "interval", minutes=NEWSPAPER_POLL_INTERVAL_MINUTES,
+        args=[bot], id="newspaper_discovery_cycle", max_instances=1, coalesce=True,
+    )
+    # Ticks every minute so a user's per-interval throttle is honored promptly, but each
+    # tick only pops at most one queued post per due user — the actual pacing is enforced
+    # by NEWSPAPER_ALERT_INTERVAL_MINUTES via users.last_newspaper_alert_at, not by this
+    # job's own frequency.
+    scheduler.add_job(
+        dispatch_newspaper_alerts, "interval", minutes=1,
+        args=[bot, NEWSPAPER_ALERT_INTERVAL_MINUTES], id="newspaper_alert_dispatch",
+        max_instances=1, coalesce=True,
+    )
+    scheduler.add_job(
+        run_classification_batch, "interval", minutes=CLASSIFICATION_BATCH_INTERVAL_MINUTES,
+        args=[bot], id="classification_batch", max_instances=1, coalesce=True,
+    )
     scheduler.add_job(run_cleanup, "interval", hours=24, id="cleanup")
+    scheduler.add_job(cleanup_old_logs, "interval", hours=1, id="log_cleanup")
     scheduler.start()
-    logger.info("Scheduler started (discovery every %d minutes)", POLL_INTERVAL_MINUTES)
 
-    classification_task = asyncio.create_task(run_classification_worker(bot))
+    outgoing_dispatcher_task = asyncio.create_task(run_outgoing_dispatcher())
+    logger.info(
+        "Scheduler started (discovery every %d minutes, newspapers every %d minutes, "
+        "classification batched every %d minutes, newspaper alerts throttled to 1 per %d minutes per user)",
+        POLL_INTERVAL_MINUTES, NEWSPAPER_POLL_INTERVAL_MINUTES,
+        CLASSIFICATION_BATCH_INTERVAL_MINUTES, NEWSPAPER_ALERT_INTERVAL_MINUTES,
+    )
 
     try:
         await bot.delete_webhook(drop_pending_updates=True)
@@ -59,14 +103,15 @@ async def main() -> None:
         logger.exception("Bot polling crashed")
         raise
     finally:
-        classification_task.cancel()
+        scheduler.shutdown(wait=False)
+        outgoing_dispatcher_task.cancel()
         try:
-            await classification_task
+            await outgoing_dispatcher_task
         except asyncio.CancelledError:
             pass
-        scheduler.shutdown(wait=False)
         await bot.session.close()
         await stop_userbot()
+        await close_connection_pragmas()
 
 
 if __name__ == "__main__":

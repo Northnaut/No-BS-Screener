@@ -1,9 +1,14 @@
 .env
+.env.bak
+.env.*.bak
 bot.db
 bot.db-journal
+bot.db-shm
+bot.db-wal
 __pycache__/
 *.pyc
 .venv/
 venv/
 *.log
+.pytest_cache/
 .claude/settings.local.json

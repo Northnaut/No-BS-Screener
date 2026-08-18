@@ -60,6 +60,33 @@ _DDL_STATEMENTS = [
     CREATE INDEX IF NOT EXISTS idx_seen_unclassified
     ON seen_posts(created_at) WHERE is_important IS NULL
     """,
+    """
+    CREATE TABLE IF NOT EXISTS newspaper_category_subs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        category TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(user_id, category)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_newspaper_subs_category
+    ON newspaper_category_subs(category)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS newspaper_delivery_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        seen_post_id INTEGER NOT NULL REFERENCES seen_posts(id) ON DELETE CASCADE,
+        category TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(user_id, seen_post_id)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_newspaper_queue_user_created
+    ON newspaper_delivery_queue(user_id, created_at)
+    """,
 ]
 
 
@@ -79,4 +106,16 @@ async def init_db() -> None:
         await _ensure_column(conn, "users", "youtube_shorts_enabled", "INTEGER NOT NULL DEFAULT 1")
         await _ensure_column(conn, "seen_posts", "summary_degen", "TEXT NULL")
         await _ensure_column(conn, "users", "summary_style", "TEXT NOT NULL DEFAULT 'brief'")
+        await _ensure_column(conn, "sources", "category", "TEXT NULL")
+        await _ensure_column(conn, "seen_posts", "summary_eli5", "TEXT NULL")
+        await _ensure_column(conn, "seen_posts", "summary_tiktok", "TEXT NULL")
+        await _ensure_column(conn, "users", "last_newspaper_alert_at", "TEXT NULL")
+        await _ensure_column(conn, "seen_posts", "classification_attempts", "INTEGER NOT NULL DEFAULT 0")
+        # get_source_subscribers filters by source_id, but the only usable index is
+        # UNIQUE(user_id, source_id) — wrong leading column, so every broadcast fell back to
+        # a full scan of subscriptions.
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_subscriptions_source ON subscriptions(source_id)")
+        # Without stats the query planner works purely off heuristics; this is what lets it
+        # pick the partial unclassified index over a full platform-driven scan.
+        await conn.execute("ANALYZE")
     logger.info("Database initialized (schema ensured)")

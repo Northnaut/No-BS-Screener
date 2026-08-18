@@ -81,19 +81,22 @@ async def _fetch_via_rss(session: aiohttp.ClientSession, subreddit: str, limit: 
                 external_id = entry.id
                 title = entry.title
                 link = entry.link
-                published = entry.published
             except AttributeError:
                 logger.warning("Skipping malformed RSS entry in r/%s: missing required field", subreddit)
                 continue
 
-            try:
-                published_at = datetime.fromisoformat(published)
-            except (ValueError, TypeError):
-                logger.warning("Skipping RSS entry %s with unparseable date %r", external_id, published)
-                continue
-
-            if published_at.tzinfo is None:
-                published_at = published_at.replace(tzinfo=timezone.utc)
+            # feedparser normalizes published/updated dates from *any* dialect (Atom ISO8601,
+            # RSS 2.0 RFC822, etc.) into published_parsed/updated_parsed — using that instead of
+            # parsing entry.published ourselves means a future Reddit feed-format change can't
+            # silently make every entry vanish; a missing/unparseable date just falls back to
+            # "now" instead of dropping the post.
+            published_at = datetime.now(timezone.utc)
+            parsed_time = entry.get("published_parsed") or entry.get("updated_parsed")
+            if parsed_time:
+                try:
+                    published_at = datetime(*parsed_time[:6], tzinfo=timezone.utc)
+                except (TypeError, ValueError):
+                    pass
 
             content_html = ""
             if entry.get("content"):
