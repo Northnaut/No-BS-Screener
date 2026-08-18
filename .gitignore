@@ -11,4 +11,5 @@ __pycache__/
 venv/
 *.log
 .pytest_cache/
-.claude/settings.local.json
+.claude/
+plan.md
